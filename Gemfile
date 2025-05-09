@@ -1,7 +1,15 @@
 source "https://rubygems.org"
 
 ruby "3.1.2"
+# Redis for caching and Sidekiq
+gem 'redis'
+gem 'redis-rails'
 
+# Background job processing
+gem 'sidekiq'
+
+# For Redis namespace support
+gem 'redis-namespace'
 gem 'rack-cors'
 gem 'active_model_serializers'
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
@@ -49,3 +57,5 @@ group :development do
   gem "error_highlight", ">= 0.4.0", platforms: [:ruby]
 end
 
+
+gem "caxlsx", "~> 4.2"
