@@ -1,0 +1,18 @@
+runtime: ruby
+runtime_config:
+  ruby_version: 3.1
+env: flex
+entrypoint: bundle exec rails server -p $PORT
+
+env_variables:
+  RAILS_ENV: production
+  RAILS_MASTER_KEY: 0308c1e690525cb29bf2e87721744ecb  # Replace with your actual key
+  DATABASE_HOST: 34.42.134.178
+  DATABASE_NAME: rails_production
+  DATABASE_USERNAME: postgres
+  DATABASE_PASSWORD: ahmed2
+  # Comment out if not using Redis
+  # REDIS_URL: redis://localhost:6379
+
+manual_scaling:
+  instances: 1
