@@ -45,6 +45,8 @@ Rails.application.configure do
   config.force_ssl = true
 config.action_cable.url = ENV["REDIS_URL"]
 config.action_cable.allowed_request_origins = [ /http:\/\/.*/, /https:\/\/.*/ ]
+config.assets.compile = false
+config.assets.initialize_on_precompile = false
 
   # Log to STDOUT by default
   config.logger = ActiveSupport::Logger.new(STDOUT)
