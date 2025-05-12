@@ -43,6 +43,6 @@ jobs:
           --platform managed \
           --region us-central1 \
           --allow-unauthenticated \
-          --set-env-vars RAILS_ENV=production,DATABASE_NAME=rails_production,DATABASE_USERNAME=postgres,DATABASE_PASSWORD=ahmed2,DATABASE_HOST=34.42.134.178,REDIS_URL=redis://localhost:9999/0
-          ,RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }}
+          --set-env-vars RAILS_ENV=production,DATABASE_NAME=rails_production,DATABASE_USERNAME=postgres,DATABASE_PASSWORD=ahmed2,DATABASE_HOST=34.42.134.178,REDIS_URL=redis://localhost:9999/0,RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }}
+
 
