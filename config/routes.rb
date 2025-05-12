@@ -6,6 +6,7 @@ Sidekiq::Web.use ActionDispatch::Cookies
 Sidekiq::Web.use ActionDispatch::Session::CookieStore, key: '_mailing_database_app_session'
 
 Rails.application.routes.draw do
+  get "/up", to: proc { [200, {}, ["OK"]] }
   namespace :api do
     namespace :v1 do
       resources :mailed do
