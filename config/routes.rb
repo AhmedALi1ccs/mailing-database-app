@@ -15,7 +15,7 @@ Rails.application.routes.draw do
           get :export
         end
       end
-      
+      get '/test', to: proc { [200, {'Content-Type' => 'text/plain'}, ['Rails API is working!']] }
       # Search route
       get '/search', to: 'mailed#search'
     end
