@@ -1,0 +1,46 @@
+name: Deploy to Google Cloud Run
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Build & Deploy to Cloud Run
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v3
+
+    - name: Authenticate with Google Cloud
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+    - name: Set up Google Cloud CLI
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        project_id: mailing-database-app
+        install_components: 'beta'
+
+    - name: Configure Docker for Artifact Registry
+      run: |
+        gcloud auth configure-docker us-central1-docker.pkg.dev
+
+    - name: Build Docker image
+      run: |
+        docker build -t us-central1-docker.pkg.dev/mailing-database-app/rails-docker-repo/rails-app:$GITHUB_SHA .
+
+    - name: Push Docker image
+      run: |
+        docker push us-central1-docker.pkg.dev/mailing-database-app/rails-docker-repo/rails-app:$GITHUB_SHA
+
+    - name: Deploy to Cloud Run
+      run: |
+        gcloud run deploy rails-app \
+          --image us-central1-docker.pkg.dev/mailing-database-app/rails-docker-repo/rails-app:$GITHUB_SHA \
+          --platform managed \
+          --region us-central1 \
+          --allow-unauthenticated \
+          --set-env-vars RAILS_ENV=production,DATABASE_NAME=rails_production,DATABASE_USERNAME=postgres,DATABASE_PASSWORD=ahmed2,DATABASE_HOST=34.42.134.178,REDIS_URL=redis://localhost:9999/0
