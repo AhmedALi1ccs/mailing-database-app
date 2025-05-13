@@ -166,19 +166,27 @@ module Api
               )
               
               # Handle checkval
-              if row['checkval'].present? && row['checkval'] != 'Call us'
-                numeric_value = row['checkval'].to_s.gsub(/[$,]/, '')
-                mailed.checkval = numeric_value if numeric_value.present?
-              end
-              
-              if mailed.save
-                imported_count += 1
-              else
-                failed_count += 1
-                errors << "Row import failed: #{mailed.errors.full_messages.join(', ')}"
-              end
-            end
-          end
+              if row['checkval'].present?
+  value_string = row['checkval'].to_s.strip
+
+      if value_string.downcase == 'call us' || value_string.downcase == 'n/a'
+        mailed.checkval = nil
+      else
+        # Handle both with and without dollar sign
+        # Remove dollar signs, commas, spaces, and other non-numeric characters
+        numeric_string = value_string.gsub(/[$,\s]/, '')
+        
+        # Check if it's a valid numeric string
+        if numeric_string.match?(/\A-?\d+(\.\d+)?\z/)
+          # Convert to BigDecimal for precision
+          mailed.checkval = BigDecimal(numeric_string)
+        else
+          # Log invalid format but continue with import
+          Rails.logger.warn("Invalid checkval format: '#{value_string}' for row with property: #{row['property_address']}")
+          mailed.checkval = nil
+        end
+      end
+    end
           
           # Return success response with details
           render json: {
@@ -201,40 +209,43 @@ module Api
 
       private
         # Private helper methods for export
-        def export_csv
-          csv_data = CSV.generate(headers: true) do |csv|
-            # Add headers
-            csv << ['full_name', 'first_name', 'last_name', 'property_address', 'property_city', 
-                    'property_state', 'property_zip', 'mailing_address', 'mailing_city', 
-                    'mailing_state', 'mailing_zip', 'checkval', 'mail_month']
-            
-            # Add rows
-            @records.each do |record|
-              csv << [
-                record.full_name,
-                record.first_name, 
-                record.last_name,
-                record.property_address,
-                record.property_city,
-                record.property_state,
-                record.property_zip,
-                record.mailing_address,
-                record.mailing_city,
-                record.mailing_state,
-                record.mailing_zip,
-                record.checkval,
-                record.mail_month
-              ]
-            end
-          end
-          
-          # Send the file
-          send_data csv_data, 
-                    type: 'text/csv', 
-                    disposition: 'attachment', 
-                    filename: "mailing-data-#{Date.today}.csv"
-        end
-
+      def export_csv
+  # Get format preference from params
+  include_dollar = params[:include_dollar] != 'false'
+  
+  csv_data = CSV.generate(headers: true) do |csv|
+    # Add headers
+    csv << ['full_name', 'first_name', 'last_name', 'property_address', 'property_city', 
+            'property_state', 'property_zip', 'mailing_address', 'mailing_city', 
+            'mailing_state', 'mailing_zip', 'checkval', 'mail_month']
+    
+    # Add rows
+    @records.each do |record|
+      csv << [
+        record.full_name,
+        record.first_name, 
+        record.last_name,
+        record.property_address,
+        record.property_city,
+        record.property_state,
+        record.property_zip,
+        record.mailing_address,
+        record.mailing_city,
+        record.mailing_state,
+        record.mailing_zip,
+        # Format checkval according to preference
+        record.formatted_checkval(include_dollar),
+        record.mail_month
+      ]
+    end
+  end
+  
+  # Send the file
+  send_data csv_data, 
+            type: 'text/csv', 
+            disposition: 'attachment', 
+            filename: "mailing-data-#{Date.today}.csv"
+end
         def export_xlsx
           # For Excel export, you'll need a gem like 'caxlsx'
           require 'axlsx'

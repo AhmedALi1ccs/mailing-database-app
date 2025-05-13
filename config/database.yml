@@ -89,8 +89,7 @@ production:
   encoding: unicode
   pool: 5
   timeout: 5000
-  host: <%= ENV['DATABASE_HOST'] %>
-  database: <%= ENV['DATABASE_NAME'] %>
-  username: <%= ENV['DATABASE_USERNAME'] %>
-  password: <%= ENV['DATABASE_PASSWORD'] %>
-  reconnect: true
+  host: /cloudsql/mailing-database-app:us-central1:my-rails-db
+  database: rails_production
+  username: postgres
+  password: ahmed2

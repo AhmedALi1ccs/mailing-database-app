@@ -1,16 +1,16 @@
 runtime: custom
 env: flex
-entrypoint: bundle exec rails server -b 0.0.0.0 -p $PORT
 
 env_variables:
   RAILS_ENV: production
   RAILS_MASTER_KEY: 0308c1e690525cb29bf2e87721744ecb
-  DATABASE_HOST: 34.42.134.178
+  DATABASE_HOST: /cloudsql/mailing-database-app:us-central1:my-rails-db
   DATABASE_NAME: rails_production
   DATABASE_USERNAME: postgres
   DATABASE_PASSWORD: ahmed2
-  SECRET_KEY_BASE: a_long_secret_key_for_production
-  RAILS_SERVE_STATIC_FILES: true
+
+beta_settings:
+  cloud_sql_instances: mailing-database-app:us-central1:my-rails-db
 
 manual_scaling:
   instances: 1

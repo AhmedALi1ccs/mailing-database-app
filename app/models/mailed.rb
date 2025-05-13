@@ -4,6 +4,7 @@ class Mailed < ApplicationRecord
   # Validations
   validates :mailing_address, :mailing_city, :mailing_state, :mailing_zip, presence: true
   validates :property_address, :property_city, :property_state, :property_zip, presence: true
+  validates :checkval, numericality: { allow_nil: true }
   # Format checkval as currency
 def formatted_checkval
   checkval.present? ? "$#{sprintf('%.2f', checkval)}" : nil
