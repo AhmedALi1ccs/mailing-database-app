@@ -6,9 +6,11 @@ class Mailed < ApplicationRecord
   validates :property_address, :property_city, :property_state, :property_zip, presence: true
   validates :checkval, numericality: { allow_nil: true }
   # Format checkval as currency
-def formatted_checkval
-  checkval.present? ? "$#{sprintf('%.2f', checkval)}" : nil
+def formatted_checkval(include_dollar = true)
+  return '' if checkval.nil?
+  include_dollar ? "$#{checkval}" : checkval.to_s
 end
+
   # Search method
   def self.search(query)
     if query.present?
