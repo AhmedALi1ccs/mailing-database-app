@@ -220,42 +220,39 @@ module Api
       private
         # Private helper methods for export
         def export_csv
-          # Get format preference from params
-          include_dollar = params[:include_dollar] != 'false'
-          
-          csv_data = CSV.generate(headers: true) do |csv|
-            # Add headers
-            csv << ['full_name', 'first_name', 'last_name', 'property_address', 'property_city', 
-                    'property_state', 'property_zip', 'mailing_address', 'mailing_city', 
-                    'mailing_state', 'mailing_zip', 'checkval', 'mail_month']
-            
-            # Add rows
-            @records.each do |record|
-              csv << [
-                record.full_name,
-                record.first_name, 
-                record.last_name,
-                record.property_address,
-                record.property_city,
-                record.property_state,
-                record.property_zip,
-                record.mailing_address,
-                record.mailing_city,
-                record.mailing_state,
-                record.mailing_zip,
-                # Format checkval according to preference
-                record.formatted_checkval(include_dollar),
-                record.mail_month
-              ]
-            end
-          end
-          
-          # Send the file
-          send_data csv_data, 
-                    type: 'text/csv', 
-                    disposition: 'attachment', 
-                    filename: "mailing-data-#{Date.today}.csv"
-        end
+  include_dollar = params[:include_dollar] != 'false'
+
+  headers['Content-Type'] = 'text/csv'
+  headers['Content-Disposition'] = "attachment; filename=\"mailing-data-#{Date.today}.csv\""
+  headers['Last-Modified'] = Time.now.ctime.to_s
+  headers['Cache-Control'] = 'no-cache'
+  headers.delete('Content-Length')
+
+  self.response_body = Enumerator.new do |yielder|
+    yielder << CSV.generate_line(['full_name', 'first_name', 'last_name', 'property_address', 'property_city', 
+                                  'property_state', 'property_zip', 'mailing_address', 'mailing_city', 
+                                  'mailing_state', 'mailing_zip', 'checkval', 'mail_month'])
+
+    Mailed.find_each(batch_size: 1000) do |record|
+      yielder << CSV.generate_line([
+        record.full_name,
+        record.first_name, 
+        record.last_name,
+        record.property_address,
+        record.property_city,
+        record.property_state,
+        record.property_zip,
+        record.mailing_address,
+        record.mailing_city,
+        record.mailing_state,
+        record.mailing_zip,
+        record.formatted_checkval(include_dollar),
+        record.mail_month
+      ])
+    end
+  end
+end
+
 
         def export_xlsx
           # For Excel export, you'll need a gem like 'caxlsx'
