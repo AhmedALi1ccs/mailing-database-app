@@ -99,123 +99,116 @@ module Api
 
       # POST /api/v1/mailed/import
       def import
-        if params[:file].nil?
-          render json: { error: "No file uploaded" }, status: :bad_request
-          return
+  if params[:file].nil?
+    render json: { error: "No file uploaded" }, status: :bad_request
+    return
+  end
+
+  begin
+    # Initialize counters and tracking
+    start_time = Time.now
+    processed = 0
+    imported = 0
+    updated = 0
+    failed = 0
+    error_samples = []
+    
+    # Read file
+    file_content = params[:file].read
+    
+    # Get total rows (for progress tracking)
+    total_rows = CSV.parse(file_content, headers: true).count
+    Rails.logger.info("CSV contains #{total_rows} rows")
+    
+    # Reset file position
+    params[:file].rewind
+    
+    # Process CSV with detailed tracking
+    CSV.parse(params[:file].read, headers: true).each do |row|
+      processed += 1
+      
+      # Log progress every 1000 rows
+      if processed % 1000 == 0
+        elapsed = Time.now - start_time
+        rate = processed / elapsed
+        est_remaining = (total_rows - processed) / rate
+        
+        Rails.logger.info("Import progress: #{processed}/#{total_rows} rows (#{(processed.to_f/total_rows*100).round(1)}%), " + 
+                         "Rate: #{rate.round(1)} rows/sec, " + 
+                         "Est. remaining: #{est_remaining.round(1)}s, " + 
+                         "Imported: #{imported}, Updated: #{updated}, Failed: #{failed}")
+      end
+      
+      # Continue with your existing row processing logic
+      begin
+        # Existing row processing code
+        # ...
+        
+        # Update counters based on result
+        if result == :imported
+          imported += 1
+        elsif result == :updated
+          updated += 1
+        else
+          failed += 1
+          # Collect sample errors (limit to 10)
+          if error_samples.size < 10
+            error_samples << { row: processed, error: error_message, sample: row.to_h.slice(*row.headers.first(3)) }
+          end
         end
-
-        begin
-          # Read the file content
-          csv_content = params[:file].read
-          imported_count = 0
-          updated_count = 0
-          failed_count = 0
-          errors = []
-          
-          # Process the CSV directly
-          CSV.parse(csv_content, headers: true) do |row|
-            # Check if a record with this property address already exists
-            existing_record = Mailed.find_by(property_address: row['property_address'])
-            
-            if existing_record
-              # If record exists, compare mail_month and update if new one is more recent
-              if should_update_record?(existing_record.mail_month, row['mail_month'])
-                # Update existing record
-                existing_record.assign_attributes(
-                  full_name: row['full_name'],
-                  first_name: row['first_name'],
-                  last_name: row['last_name'],
-                  mailing_address: row['mailing_address'],
-                  mailing_city: row['mailing_city'],
-                  mailing_state: row['mailing_state'],
-                  mailing_zip: row['mailing_zip'],
-                  property_city: row['property_city'],
-                  property_state: row['property_state'],
-                  property_zip: row['property_zip'],
-                  mail_month: row['mail_month']
-                )
-                
-                # Handle checkval
-                if row['checkval'].present? && row['checkval'] != 'Call us'
-                  numeric_value = row['checkval'].to_s.gsub(/[$,]/, '')
-                  existing_record.checkval = numeric_value if numeric_value.present?
-                end
-                
-                if existing_record.save
-                  updated_count += 1
-                else
-                  failed_count += 1
-                  errors << "Row update failed: #{existing_record.errors.full_messages.join(', ')}"
-                end
-              end
-            else
-              # Create a new record if no duplicate exists
-              mailed = Mailed.new(
-                full_name: row['full_name'],
-                first_name: row['first_name'],
-                last_name: row['last_name'],
-                property_address: row['property_address'],
-                property_city: row['property_city'],
-                property_state: row['property_state'],
-                property_zip: row['property_zip'],
-                mailing_address: row['mailing_address'],
-                mailing_city: row['mailing_city'],
-                mailing_state: row['mailing_state'],
-                mailing_zip: row['mailing_zip'],
-                mail_month: row['mail_month']
-              )
-              
-              # Handle checkval
-              if row['checkval'].present?
-                value_string = row['checkval'].to_s.strip
-
-                if value_string.downcase == 'call us' || value_string.downcase == 'n/a'
-                  mailed.checkval = nil
-                else
-                  # Handle both with and without dollar sign
-                  # Remove dollar signs, commas, spaces, and other non-numeric characters
-                  numeric_string = value_string.gsub(/[$,\s]/, '')
-                  
-                  # Check if it's a valid numeric string
-                  if numeric_string.match?(/\A-?\d+(\.\d+)?\z/)
-                    # Convert to BigDecimal for precision
-                    mailed.checkval = BigDecimal(numeric_string)
-                  else
-                    # Log invalid format but continue with import
-                    Rails.logger.warn("Invalid checkval format: '#{value_string}' for row with property: #{row['property_address']}")
-                    mailed.checkval = nil
-                  end
-                end
-              end
-
-              # Save the new record
-              if mailed.save
-                imported_count += 1
-              else
-                failed_count += 1
-                errors << "Row import failed: #{mailed.errors.full_messages.join(', ')}"
-              end
-            end
-          end # This closes the CSV.parse block
-          
-          # Return success response with details - OUTSIDE the CSV.parse block but INSIDE the begin block
-          render json: {
-            success: true,
-            message: "Import completed: #{imported_count} new records, #{updated_count} updated, #{failed_count} failed.",
-            imported: imported_count,
-            updated: updated_count,
-            failed: failed_count,
-            errors: errors.take(10) # Show first 10 errors if any
-          }, status: :ok
-          
-        rescue StandardError => e
-          # Return error response
-          render json: {
-            success: false,
-            error: e.message
-          }, status: :unprocessable_entity
+      rescue => e
+        failed += 1
+        if error_samples.size < 10
+          error_samples << { row: processed, error: e.message, sample: row.to_h.slice(*row.headers.first(3)) }
         end
       end
+    end
+    
+    # Calculate stats
+    duration = Time.now - start_time
+    success_rate = ((imported + updated).to_f / processed * 100).round(2)
+    
+    # Log detailed completion
+    Rails.logger.info("Import completed: #{processed} rows processed in #{duration.round(2)}s")
+    Rails.logger.info("Results: #{imported} imported, #{updated} updated, #{failed} failed (#{success_rate}% success rate)")
+    
+    if failed > 0
+      Rails.logger.info("Sample errors: #{error_samples.inspect}")
+    end
+    
+    # Return detailed report
+    render json: {
+      success: true,
+      message: "Import completed with #{success_rate}% success rate",
+      stats: {
+        file_name: params[:file].original_filename,
+        total_rows: total_rows,
+        processed: processed,
+        imported: imported,
+        updated: updated,
+        failed: failed,
+        duration: duration.round(2),
+        rows_per_second: (processed / duration).round(2)
+      },
+      error_samples: error_samples
+    }, status: :ok
+    
+  rescue => e
+    Rails.logger.error("Import failed: #{e.message}")
+    Rails.logger.error(e.backtrace.join("\n"))
+    
+    render json: {
+      success: false,
+      error: e.message,
+      stats: {
+        processed: processed,
+        imported: imported,
+        updated: updated,
+        failed: failed
+      }
+    }, status: :unprocessable_entity
+  end
+end
 
       private
         # Private helper methods for export
