@@ -305,9 +305,13 @@ end
 
         # Helper method for determining if a record should be updated based on month
         def should_update_record?(existing_month, new_month)
+
+          
           # Define month order for comparison
           months = ["January", "February", "March", "April", "May", "June", 
                     "July", "August", "September", "October", "November", "December"]
+          
+          return true if existing_month.strip.downcase == "december"
           
           # If either month is nil or doesn't match our known months, use string comparison
           return new_month > existing_month if !months.include?(existing_month) || !months.include?(new_month)
