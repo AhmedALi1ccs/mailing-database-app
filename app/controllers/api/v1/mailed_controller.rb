@@ -98,114 +98,117 @@ module Api
       end
 
       # POST /api/v1/mailed/import
-      def import
+ def import
   if params[:file].nil?
     render json: { error: "No file uploaded" }, status: :bad_request
     return
   end
 
   begin
-    # Initialize counters and tracking
     start_time = Time.now
+    
+    # Initialize counters
     processed = 0
     imported = 0
     updated = 0
     failed = 0
-    error_samples = []
     
-    # Read file
-    file_content = params[:file].read
+    # Parse CSV
+    csv = CSV.parse(params[:file].read, headers: true)
     
-    # Get total rows (for progress tracking)
-    total_rows = CSV.parse(file_content, headers: true).count
-    Rails.logger.info("CSV contains #{total_rows} rows")
-    
-    # Reset file position
-    params[:file].rewind
-    
-    # Process CSV with detailed tracking
-    CSV.parse(params[:file].read, headers: true).each do |row|
+    # Process each row
+    csv.each do |row|
       processed += 1
       
-      # Log progress every 1000 rows
+      # Log progress periodically
       if processed % 1000 == 0
-        elapsed = Time.now - start_time
-        rate = processed / elapsed
-        est_remaining = (total_rows - processed) / rate
-        
-        Rails.logger.info("Import progress: #{processed}/#{total_rows} rows (#{(processed.to_f/total_rows*100).round(1)}%), " + 
-                         "Rate: #{rate.round(1)} rows/sec, " + 
-                         "Est. remaining: #{est_remaining.round(1)}s, " + 
-                         "Imported: #{imported}, Updated: #{updated}, Failed: #{failed}")
+        Rails.logger.info("Processing row #{processed} of #{csv.count}")
       end
       
-      # Continue with your existing row processing logic
       begin
-        # Existing row processing code
-        # ...
-        
-        # Update counters based on result
-        if result == :imported
-          imported += 1
-        elsif result == :updated
-          updated += 1
-        else
+        # Skip rows without property address
+        if row['property_address'].blank?
           failed += 1
-          # Collect sample errors (limit to 10)
-          if error_samples.size < 10
-            error_samples << { row: processed, error: error_message, sample: row.to_h.slice(*row.headers.first(3)) }
+          next
+        end
+        
+        # Check for existing record
+        existing = Mailed.find_by(property_address: row['property_address'])
+        
+        if existing
+          # Handle update
+          if should_update_record?(existing.mail_month, row['mail_month'])
+            existing.assign_attributes(
+              full_name: row['full_name'],
+              first_name: row['first_name'],
+              last_name: row['last_name'],
+              mailing_address: row['mailing_address'],
+              mailing_city: row['mailing_city'],
+              mailing_state: row['mailing_state'],
+              mailing_zip: row['mailing_zip'],
+              property_city: row['property_city'],
+              property_state: row['property_state'],
+              property_zip: row['property_zip'],
+              checkval: row['checkval'],
+              mail_month: row['mail_month']
+            )
+            
+            if existing.save
+              updated += 1
+            else
+              failed += 1
+            end
+          end
+        else
+          # Create new record
+          new_record = Mailed.new(
+            full_name: row['full_name'],
+            first_name: row['first_name'],
+            last_name: row['last_name'],
+            mailing_address: row['mailing_address'],
+            mailing_city: row['mailing_city'],
+            mailing_state: row['mailing_state'],
+            mailing_zip: row['mailing_zip'],
+            property_address: row['property_address'],
+            property_city: row['property_city'],
+            property_state: row['property_state'],
+            property_zip: row['property_zip'],
+            checkval: row['checkval'],
+            mail_month: row['mail_month']
+          )
+          
+          if new_record.save
+            imported += 1
+          else
+            failed += 1
           end
         end
       rescue => e
+        Rails.logger.error("Error processing row #{processed}: #{e.message}")
         failed += 1
-        if error_samples.size < 10
-          error_samples << { row: processed, error: e.message, sample: row.to_h.slice(*row.headers.first(3)) }
-        end
       end
     end
     
     # Calculate stats
     duration = Time.now - start_time
-    success_rate = ((imported + updated).to_f / processed * 100).round(2)
     
-    # Log detailed completion
-    Rails.logger.info("Import completed: #{processed} rows processed in #{duration.round(2)}s")
-    Rails.logger.info("Results: #{imported} imported, #{updated} updated, #{failed} failed (#{success_rate}% success rate)")
-    
-    if failed > 0
-      Rails.logger.info("Sample errors: #{error_samples.inspect}")
-    end
-    
-    # Return detailed report
+    # Return response
     render json: {
       success: true,
-      message: "Import completed with #{success_rate}% success rate",
-      stats: {
-        file_name: params[:file].original_filename,
-        total_rows: total_rows,
-        processed: processed,
-        imported: imported,
-        updated: updated,
-        failed: failed,
-        duration: duration.round(2),
-        rows_per_second: (processed / duration).round(2)
-      },
-      error_samples: error_samples
+      message: "Import completed successfully",
+      total: processed,
+      imported: imported,
+      updated: updated,
+      failed: failed,
+      duration: duration.round(2)
     }, status: :ok
     
   rescue => e
     Rails.logger.error("Import failed: #{e.message}")
-    Rails.logger.error(e.backtrace.join("\n"))
     
     render json: {
       success: false,
-      error: e.message,
-      stats: {
-        processed: processed,
-        imported: imported,
-        updated: updated,
-        failed: failed
-      }
+      error: e.message
     }, status: :unprocessable_entity
   end
 end
