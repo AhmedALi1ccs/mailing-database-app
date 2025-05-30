@@ -98,157 +98,159 @@ module Api
       end
 
       # POST /api/v1/mailed/import
- def import
-  if params[:file].nil?
-    render json: { error: "No file uploaded" }, status: :bad_request
-    return
-  end
-
-  begin
-    start_time = Time.now
-    
-    # Initialize counters
-    processed = 0
-    imported = 0
-    updated = 0
-    failed = 0
-    
-    # Parse CSV
-    csv = CSV.parse(params[:file].read, headers: true)
-    
-    # Process each row
-    csv.each do |row|
-      processed += 1
-      
-      # Log progress periodically
-      if processed % 1000 == 0
-        Rails.logger.info("Processing row #{processed} of #{csv.count}")
-      end
-      
-      begin
-        # Skip rows without property address
-        if row['property_address'].blank?
-          failed += 1
-          next
+      def import
+        if params[:file].nil?
+          render json: { error: "No file uploaded" }, status: :bad_request
+          return
         end
-        
-        # Check for existing record
-        existing = Mailed.find_by(property_address: row['property_address'])
-        
-        if existing
-          # Handle update
-          if should_update_record?(existing.mail_month, row['mail_month'])
-            existing.assign_attributes(
-              full_name: row['full_name'],
-              first_name: row['first_name'],
-              last_name: row['last_name'],
-              mailing_address: row['mailing_address'],
-              mailing_city: row['mailing_city'],
-              mailing_state: row['mailing_state'],
-              mailing_zip: row['mailing_zip'],
-              property_city: row['property_city'],
-              property_state: row['property_state'],
-              property_zip: row['property_zip'],
-              checkval: row['checkval'],
-              mail_month: row['mail_month']
-            )
+
+        begin
+          start_time = Time.now
+          
+          # Initialize counters
+          processed = 0
+          imported = 0
+          updated = 0
+          failed = 0
+          
+          # Parse CSV
+          csv = CSV.parse(params[:file].read, headers: true)
+          
+          # Process each row
+          csv.each do |row|
+            processed += 1
             
-            if existing.save
-              updated += 1
-            else
+            # Log progress periodically
+            if processed % 1000 == 0
+              Rails.logger.info("Processing row #{processed} of #{csv.count}")
+            end
+            
+            begin
+              # Skip rows without property address
+              if row['property_address'].blank?
+                failed += 1
+                next
+              end
+              
+              # Check for existing record
+              existing = Mailed.find_by(property_address: row['property_address'])
+              
+              if existing
+                # Handle update - now comparing both month and year
+                if should_update_record?(existing, row)
+                  existing.assign_attributes(
+                    full_name: row['full_name'],
+                    first_name: row['first_name'],
+                    last_name: row['last_name'],
+                    mailing_address: row['mailing_address'],
+                    mailing_city: row['mailing_city'],
+                    mailing_state: row['mailing_state'],
+                    mailing_zip: row['mailing_zip'],
+                    property_city: row['property_city'],
+                    property_state: row['property_state'],
+                    property_zip: row['property_zip'],
+                    checkval: row['checkval'],
+                    mail_month: row['mail_month'],
+                    mail_year: parse_mail_year(row['mail_year'])
+                  )
+                  
+                  if existing.save
+                    updated += 1
+                  else
+                    failed += 1
+                  end
+                end
+              else
+                # Create new record
+                new_record = Mailed.new(
+                  full_name: row['full_name'],
+                  first_name: row['first_name'],
+                  last_name: row['last_name'],
+                  mailing_address: row['mailing_address'],
+                  mailing_city: row['mailing_city'],
+                  mailing_state: row['mailing_state'],
+                  mailing_zip: row['mailing_zip'],
+                  property_address: row['property_address'],
+                  property_city: row['property_city'],
+                  property_state: row['property_state'],
+                  property_zip: row['property_zip'],
+                  checkval: row['checkval'],
+                  mail_month: row['mail_month'],
+                  mail_year: parse_mail_year(row['mail_year'])
+                )
+                
+                if new_record.save
+                  imported += 1
+                else
+                  failed += 1
+                end
+              end
+            rescue => e
+              Rails.logger.error("Error processing row #{processed}: #{e.message}")
               failed += 1
             end
           end
-        else
-          # Create new record
-          new_record = Mailed.new(
-            full_name: row['full_name'],
-            first_name: row['first_name'],
-            last_name: row['last_name'],
-            mailing_address: row['mailing_address'],
-            mailing_city: row['mailing_city'],
-            mailing_state: row['mailing_state'],
-            mailing_zip: row['mailing_zip'],
-            property_address: row['property_address'],
-            property_city: row['property_city'],
-            property_state: row['property_state'],
-            property_zip: row['property_zip'],
-            checkval: row['checkval'],
-            mail_month: row['mail_month']
-          )
           
-          if new_record.save
-            imported += 1
-          else
-            failed += 1
-          end
+          # Calculate stats
+          duration = Time.now - start_time
+          
+          # Return response
+          render json: {
+            success: true,
+            message: "Import completed successfully",
+            total: processed,
+            imported: imported,
+            updated: updated,
+            failed: failed,
+            duration: duration.round(2)
+          }, status: :ok
+          
+        rescue => e
+          Rails.logger.error("Import failed: #{e.message}")
+          
+          render json: {
+            success: false,
+            error: e.message
+          }, status: :unprocessable_entity
         end
-      rescue => e
-        Rails.logger.error("Error processing row #{processed}: #{e.message}")
-        failed += 1
       end
-    end
-    
-    # Calculate stats
-    duration = Time.now - start_time
-    
-    # Return response
-    render json: {
-      success: true,
-      message: "Import completed successfully",
-      total: processed,
-      imported: imported,
-      updated: updated,
-      failed: failed,
-      duration: duration.round(2)
-    }, status: :ok
-    
-  rescue => e
-    Rails.logger.error("Import failed: #{e.message}")
-    
-    render json: {
-      success: false,
-      error: e.message
-    }, status: :unprocessable_entity
-  end
-end
 
       private
         # Private helper methods for export
         def export_csv
-  include_dollar = params[:include_dollar] != 'false'
+          include_dollar = params[:include_dollar] != 'false'
 
-  headers['Content-Type'] = 'text/csv'
-  headers['Content-Disposition'] = "attachment; filename=\"mailing-data-#{Date.today}.csv\""
-  headers['Last-Modified'] = Time.now.ctime.to_s
-  headers['Cache-Control'] = 'no-cache'
-  headers.delete('Content-Length')
+          headers['Content-Type'] = 'text/csv'
+          headers['Content-Disposition'] = "attachment; filename=\"mailing-data-#{Date.today}.csv\""
+          headers['Last-Modified'] = Time.now.ctime.to_s
+          headers['Cache-Control'] = 'no-cache'
+          headers.delete('Content-Length')
 
-  self.response_body = Enumerator.new do |yielder|
-    yielder << CSV.generate_line(['full_name', 'first_name', 'last_name', 'property_address', 'property_city', 
-                                  'property_state', 'property_zip', 'mailing_address', 'mailing_city', 
-                                  'mailing_state', 'mailing_zip', 'checkval', 'mail_month'])
+          self.response_body = Enumerator.new do |yielder|
+            yielder << CSV.generate_line(['full_name', 'first_name', 'last_name', 'property_address', 'property_city', 
+                                          'property_state', 'property_zip', 'mailing_address', 'mailing_city', 
+                                          'mailing_state', 'mailing_zip', 'checkval', 'mail_month', 'mail_year'])
 
-    Mailed.find_each(batch_size: 1000) do |record|
-      yielder << CSV.generate_line([
-        record.full_name,
-        record.first_name, 
-        record.last_name,
-        record.property_address,
-        record.property_city,
-        record.property_state,
-        record.property_zip,
-        record.mailing_address,
-        record.mailing_city,
-        record.mailing_state,
-        record.mailing_zip,
-        record.formatted_checkval(include_dollar),
-        record.mail_month
-      ])
-    end
-  end
-end
-
+            Mailed.find_each(batch_size: 1000) do |record|
+              yielder << CSV.generate_line([
+                record.full_name,
+                record.first_name, 
+                record.last_name,
+                record.property_address,
+                record.property_city,
+                record.property_state,
+                record.property_zip,
+                record.mailing_address,
+                record.mailing_city,
+                record.mailing_state,
+                record.mailing_zip,
+                record.formatted_checkval(include_dollar),
+                record.mail_month,
+                record.mail_year
+              ])
+            end
+          end
+        end
 
         def export_xlsx
           # For Excel export, you'll need a gem like 'caxlsx'
@@ -262,7 +264,7 @@ end
             # Add headers
             sheet.add_row ['full_name', 'first_name', 'last_name', 'property_address', 'property_city', 
                           'property_state', 'property_zip', 'mailing_address', 'mailing_city', 
-                          'mailing_state', 'mailing_zip', 'checkval', 'mail_month']
+                          'mailing_state', 'mailing_zip', 'checkval', 'mail_month', 'mail_year']
             
             # Add data rows
             @records.each do |record|
@@ -279,7 +281,8 @@ end
                 record.mailing_state,
                 record.mailing_zip,
                 record.checkval,
-                record.mail_month
+                record.mail_month,
+                record.mail_year
               ]
             end
           end
@@ -303,21 +306,37 @@ end
           request.format.json?
         end
 
-        # Helper method for determining if a record should be updated based on month
-        def should_update_record?(existing_month, new_month)
-
+        # Helper method to parse mail_year from CSV, with fallback to current year
+        def parse_mail_year(year_value)
+          return Date.current.year if year_value.blank?
           
-          # Define month order for comparison
+          year = year_value.to_i
+          # Basic validation - year should be reasonable
+          if year >= 2000 && year <= Date.current.year + 5
+            year
+          else
+            Date.current.year
+          end
+        end
+
+        # Updated method to compare records by both month and year
+        def should_update_record?(existing_record, new_row)
+          new_year = parse_mail_year(new_row['mail_year'])
+          new_month = new_row['mail_month']
+          
+          return true if new_month.blank? # If no month specified, allow update
+          
+          # Get existing record's date value
+          existing_value = existing_record.mail_date_value
+          
+          # Calculate new record's date value
           months = ["January", "February", "March", "April", "May", "June", 
                     "July", "August", "September", "October", "November", "December"]
+          new_month_index = months.index(new_month) || 0
+          new_value = (new_year * 12) + new_month_index
           
-          return true if existing_month.strip.downcase == "december"
-          
-          # If either month is nil or doesn't match our known months, use string comparison
-          return new_month > existing_month if !months.include?(existing_month) || !months.include?(new_month)
-          
-          # Compare by month order (higher index = more recent)
-          months.index(new_month) >= months.index(existing_month)
+          # Update if new record is newer or equal (you can change this logic)
+          new_value >= existing_value
         end
       
         # Use callbacks to share common setup or constraints between actions
@@ -340,7 +359,8 @@ end
             :property_state,
             :property_zip,
             :checkval,
-            :mail_month
+            :mail_month,
+            :mail_year
           )
         end
     end

@@ -5,13 +5,34 @@ class Mailed < ApplicationRecord
   validates :mailing_address, :mailing_city, :mailing_state, :mailing_zip, presence: true
   validates :property_address, :property_city, :property_state, :property_zip, presence: true
   validates :checkval, numericality: { allow_nil: true }
-  # Format checkval as currency
-def formatted_checkval(include_dollar = true)
-  return '' if checkval.nil?
-  include_dollar ? "$#{checkval}" : checkval.to_s
-end
+  validates :mail_month, presence: true
+  validates :mail_year, presence: true, numericality: { 
+    greater_than: 2000, 
+    less_than_or_equal_to: -> { Date.current.year + 1 } 
+  }
 
-  # Search method
+  # Valid months for validation
+  VALID_MONTHS = %w[January February March April May June July August September October November December].freeze
+  validates :mail_month, inclusion: { in: VALID_MONTHS }
+
+  # Format checkval as currency
+  def formatted_checkval(include_dollar = true)
+    return '' if checkval.nil?
+    include_dollar ? "$#{checkval}" : checkval.to_s
+  end
+
+  # New method to get formatted mail period
+  def mail_period
+    "#{mail_month} #{mail_year}"
+  end
+
+  # New method to compare mail periods
+  def mail_date_value
+    month_index = VALID_MONTHS.index(mail_month) || 0
+    (mail_year * 12) + month_index
+  end
+
+  # Search method (unchanged)
   def self.search(query)
     if query.present?
       where("full_name ILIKE :query OR

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_05_13_143920) do
+ActiveRecord::Schema[7.1].define(version: 2025_05_28_181658) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -30,8 +30,10 @@ ActiveRecord::Schema[7.1].define(version: 2025_05_13_143920) do
     t.string "mail_month"
     t.datetime "created_at", precision: nil, default: -> { "now()" }, null: false
     t.datetime "updated_at", precision: nil, default: -> { "now()" }, null: false
+    t.integer "mail_year", null: false
     t.index ["full_name"], name: "idx_mailed_full_name"
     t.index ["last_name"], name: "idx_mailed_last_name"
+    t.index ["mail_month", "mail_year"], name: "index_mailed_on_mail_month_and_mail_year"
     t.index ["mailing_address"], name: "idx_mailed_mailing_address"
     t.index ["mailing_zip"], name: "idx_mailed_mailing_zip"
     t.index ["property_address"], name: "idx_mailed_property_address"
