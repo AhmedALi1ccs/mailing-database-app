@@ -31,6 +31,33 @@ class Mailed < ApplicationRecord
     month_index = VALID_MONTHS.index(mail_month) || 0
     (mail_year * 12) + month_index
   end
+  def lists_array
+    return [] if lists.blank?
+    lists.split(',').map(&:strip).reject(&:blank?)
+  end
+
+  def add_to_list(list_name)
+    return if list_name.blank?
+    
+    current_lists = lists_array
+    unless current_lists.include?(list_name.strip)
+      current_lists << list_name.strip
+      self.lists = current_lists.join(', ')
+    end
+  end
+
+  def remove_from_list(list_name)
+    return if list_name.blank?
+    
+    current_lists = lists_array
+    current_lists.delete(list_name.strip)
+    self.lists = current_lists.join(', ')
+  end
+
+  def in_list?(list_name)
+    return false if list_name.blank?
+    lists_array.include?(list_name.strip)
+  end
 
   # Search method (unchanged)
   def self.search(query)
@@ -45,7 +72,8 @@ class Mailed < ApplicationRecord
              property_address ILIKE :query OR 
              property_city ILIKE :query OR 
              property_state ILIKE :query OR 
-             property_zip ILIKE :query", query: "%#{query}%")
+             property_zip ILIKE :query OR
+             lists ILIKE :query", query: "%#{query}%")
     else
       all
     end

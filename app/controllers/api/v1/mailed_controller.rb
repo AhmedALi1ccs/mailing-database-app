@@ -151,7 +151,8 @@ module Api
                     property_zip: row['property_zip'],
                     checkval: row['checkval'],
                     mail_month: row['mail_month'],
-                    mail_year: parse_mail_year(row['mail_year'])
+                    mail_year: parse_mail_year(row['mail_year']),
+                    lists: row['lists']
                   )
                   
                   if existing.save
@@ -176,7 +177,8 @@ module Api
                   property_zip: row['property_zip'],
                   checkval: row['checkval'],
                   mail_month: row['mail_month'],
-                  mail_year: parse_mail_year(row['mail_year'])
+                  mail_year: parse_mail_year(row['mail_year']),
+                  lists: row['lists']
                 )
                 
                 if new_record.save
@@ -246,7 +248,8 @@ module Api
                 record.mailing_zip,
                 record.formatted_checkval(include_dollar),
                 record.mail_month,
-                record.mail_year
+                record.mail_year,
+                record.lists
               ])
             end
           end
@@ -264,7 +267,7 @@ module Api
             # Add headers
             sheet.add_row ['full_name', 'first_name', 'last_name', 'property_address', 'property_city', 
                           'property_state', 'property_zip', 'mailing_address', 'mailing_city', 
-                          'mailing_state', 'mailing_zip', 'checkval', 'mail_month', 'mail_year']
+                          'mailing_state', 'mailing_zip', 'checkval', 'mail_month', 'mail_year','lists']
             
             # Add data rows
             @records.each do |record|
@@ -282,7 +285,8 @@ module Api
                 record.mailing_zip,
                 record.checkval,
                 record.mail_month,
-                record.mail_year
+                record.mail_year,
+                record.lists
               ]
             end
           end
@@ -360,7 +364,8 @@ module Api
             :property_zip,
             :checkval,
             :mail_month,
-            :mail_year
+            :mail_year,
+            :lists
           )
         end
     end
