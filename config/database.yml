@@ -87,9 +87,5 @@ test:
 production:
   adapter: postgresql
   encoding: unicode
-  pool: 5
-  timeout: 5000
-  host: /cloudsql/mailing-database-app:us-central1:my-rails-db
-  database: rails_production
-  username: postgres
-  password: ahmed2
+  url: <%= ENV["SUPABASE_DATABASE_URL"] %>
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>

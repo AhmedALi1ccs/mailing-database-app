@@ -4,13 +4,7 @@ env: flex
 env_variables:
   RAILS_ENV: production
   RAILS_MASTER_KEY: 0308c1e690525cb29bf2e87721744ecb
-  DATABASE_HOST: /cloudsql/mailing-database-app:us-central1:my-rails-db
-  DATABASE_NAME: rails_production
-  DATABASE_USERNAME: postgres
-  DATABASE_PASSWORD: ahmed2
-
-beta_settings:
-  cloud_sql_instances: mailing-database-app:us-central1:my-rails-db
+  SUPABASE_DATABASE_URL: "postgresql://postgres:%40Thebestboy10@postgres.gifbdzhmvjwengppexle.supabase.co:6543/postgres"
 
 manual_scaling:
   instances: 1
