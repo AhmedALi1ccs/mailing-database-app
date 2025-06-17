@@ -4,7 +4,7 @@ env: flex
 env_variables:
   RAILS_ENV: production
   RAILS_MASTER_KEY: 0308c1e690525cb29bf2e87721744ecb
-  SUPABASE_DATABASE_URL: "postgresql://postgres:%40Thebestboy10@aws-0-us-east-1.pooler.supabase.com:6543/postgres"
+  SUPABASE_DATABASE_URL: "postgresql://postgres.gifbdzhmvjwengppexle:%40Thebestboy10@aws-0-us-east-1.pooler.supabase.com:6543/postgres"
 
 
 manual_scaling:
