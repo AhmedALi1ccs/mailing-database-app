@@ -1,6 +1,6 @@
 source "https://rubygems.org"
 
-ruby "3.1.2"
+ruby "3.2.2"
 # Redis for caching and Sidekiq
 gem 'redis'
 gem 'redis-rails'
