@@ -1,4 +1,4 @@
-FROM ruby:3.1.2
+FROM ruby:3.2.2
 
 # Install dependencies
 RUN apt-get update -qq && \
@@ -8,9 +8,6 @@ RUN apt-get update -qq && \
 
 # Set working directory
 WORKDIR /app
-
-# Install specific Nokogiri version with native extensions
-RUN gem install nokogiri -v '1.18.8' --platform=ruby
 
 # Add Gemfile and install gems
 COPY Gemfile Gemfile.lock ./
@@ -22,13 +19,15 @@ RUN bundle config set --local without 'development test' && \
 # Copy the application
 COPY . .
 
-# Precompile assets if needed
-RUN if grep -q "assets:precompile" Rakefile; then \
-      SECRET_KEY_BASE=dummy RAILS_ENV=production bundle exec rake assets:precompile; \
-    fi
+# Copy and set up entrypoint
+COPY bin/docker-entrypoint.sh /usr/bin/
+RUN chmod +x /usr/bin/docker-entrypoint.sh
 
 # Expose port
 EXPOSE 8080
+
+# Set entrypoint
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 # Start the server
 CMD ["bundle", "exec", "rails", "server", "-b", "0.0.0.0", "-p", "8080"]

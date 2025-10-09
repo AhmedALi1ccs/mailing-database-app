@@ -1,0 +1,9 @@
+#!/bin/bash
+set -e
+
+# Run database migrations
+echo "Running DB Migrations..."
+bundle exec rails db:migrate
+
+# Start the server
+exec "$@"
