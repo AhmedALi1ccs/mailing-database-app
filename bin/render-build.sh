@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 set -o errexit
 
-# Update bundler first
-gem update --system 3.3.22
-
-# Remove Gemfile.lock and regenerate
-rm -f Gemfile.lock
+# Update RubyGems to meet nokogiri requirements
+gem update --system --no-document
 
 # Install dependencies
 bundle install
