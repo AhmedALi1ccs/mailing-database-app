@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_06_17_005318) do
+ActiveRecord::Schema[7.1].define(version: 2025_10_07_153957) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -41,7 +41,20 @@ ActiveRecord::Schema[7.1].define(version: 2025_06_17_005318) do
     t.index ["property_zip"], name: "idx_mailed_property_zip"
   end
 
-  create_table "previouscampaigns", id: :serial, force: :cascade do |t|
+  create_table "mailing_histories", force: :cascade do |t|
+    t.bigint "mailed_id", null: false
+    t.decimal "checkval", precision: 15, scale: 2
+    t.string "mail_month"
+    t.integer "mail_year"
+    t.string "lists"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["mailed_id", "mail_year", "mail_month"], name: "idx_mailing_hist_period"
+    t.index ["mailed_id"], name: "idx_mailing_hist_mailed"
+  end
+
+  create_table "previouscampaigns", id: false, force: :cascade do |t|
+    t.serial "id", null: false
     t.text "mailing_address", null: false
     t.string "campaign", limit: 20, null: false
     t.datetime "created_at", precision: nil, default: -> { "CURRENT_TIMESTAMP" }
@@ -85,6 +98,9 @@ ActiveRecord::Schema[7.1].define(version: 2025_06_17_005318) do
     t.date "Sale Date"
     t.decimal "Sale Price"
     t.string "Group", limit: 1
+
+    t.unique_constraint ["parcel_number"], name: "unique_parcel_number"
   end
 
+  add_foreign_key "mailing_histories", "mailed"
 end

@@ -4,6 +4,7 @@ ruby "3.1.2"
 # Redis for caching and Sidekiq
 gem 'redis'
 gem 'redis-rails'
+gem "rdoc", "6.14.1"
 
 # Background job processing
 gem 'sidekiq'

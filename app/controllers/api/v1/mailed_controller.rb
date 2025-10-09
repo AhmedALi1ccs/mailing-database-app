@@ -4,7 +4,6 @@ require 'csv'
 module Api
   module V1
     class MailedController < ApplicationController
-      # Skip CSRF protection for API endpoints
       skip_before_action :verify_authenticity_token, if: :json_request?
       before_action :set_mailed, only: [:show, :update, :destroy]
 
@@ -16,7 +15,11 @@ module Api
 
       # GET /api/v1/mailed/1
       def show
-        render json: @mailed
+        # Include history in the response
+        render json: @mailed.as_json(
+          methods: :full_history,
+          except: [:created_at, :updated_at]
+        )
       end
 
       # POST /api/v1/mailed
@@ -48,20 +51,17 @@ module Api
       # GET /api/v1/search
       def search
         query = params[:q]
-        search_type = params[:type] # This will be 'mailing', 'property', or nil (for both)
+        search_type = params[:type]
         
         if query.present?
           case search_type
           when 'mailing'
-            # Search only mailing addresses
             exact_matches = Mailed.where("mailing_address = ?", query)
             @results = exact_matches.exists? ? exact_matches : Mailed.where("mailing_address ILIKE ?", "%#{query}%")
           when 'property'
-            # Search only property addresses
             exact_matches = Mailed.where("property_address = ?", query)
             @results = exact_matches.exists? ? exact_matches : Mailed.where("property_address ILIKE ?", "%#{query}%")
           else
-            # Search both (default behavior)
             exact_matches = Mailed.where("mailing_address = ? OR property_address = ?", query, query)
             
             if exact_matches.exists?
@@ -74,15 +74,21 @@ module Api
           @results = []
         end
         
-        render json: @results.as_json(except: [:created_at, :updated_at])
+        # Add display fields for multiple campaigns
+        results_with_display = @results.map do |record|
+          record.as_json(except: [:created_at, :updated_at]).merge(
+            display_checkval: record.display_checkval,
+            display_mail_period: record.display_mail_period,
+            has_multiple_campaigns: record.has_multiple_campaigns?
+          )
+        end
+        
+        render json: results_with_display
       end
 
       # GET /api/v1/mailed/export
       def export
-        # Get all records or filter if needed
         @records = Mailed.all
-        
-        # Determine export format
         format = params[:format] || 'csv'
         
         case format.downcase
@@ -107,37 +113,33 @@ module Api
         begin
           start_time = Time.now
           
-          # Initialize counters
           processed = 0
           imported = 0
           updated = 0
           failed = 0
           
-          # Parse CSV
           csv = CSV.parse(params[:file].read, headers: true)
           
-          # Process each row
           csv.each do |row|
             processed += 1
             
-            # Log progress periodically
             if processed % 1000 == 0
               Rails.logger.info("Processing row #{processed} of #{csv.count}")
             end
             
             begin
-              # Skip rows without property address
               if row['property_address'].blank?
                 failed += 1
                 next
               end
               
-              # Check for existing record
+              # Find existing record by property address
               existing = Mailed.find_by(property_address: row['property_address'])
               
               if existing
-                # Handle update - now comparing both month and year
+                # Check if this is a newer campaign
                 if should_update_record?(existing, row)
+                  # The before_update callback will automatically save to history
                   existing.assign_attributes(
                     full_name: row['full_name'],
                     first_name: row['first_name'],
@@ -159,7 +161,11 @@ module Api
                     updated += 1
                   else
                     failed += 1
+                    Rails.logger.error("Failed to update: #{existing.errors.full_messages}")
                   end
+                else
+                  # Even if not updating current, add to history if it's a different period
+                  add_to_history_if_unique(existing, row)
                 end
               else
                 # Create new record
@@ -185,6 +191,7 @@ module Api
                   imported += 1
                 else
                   failed += 1
+                  Rails.logger.error("Failed to create: #{new_record.errors.full_messages}")
                 end
               end
             rescue => e
@@ -193,10 +200,8 @@ module Api
             end
           end
           
-          # Calculate stats
           duration = Time.now - start_time
           
-          # Return response
           render json: {
             success: true,
             message: "Import completed successfully",
@@ -218,156 +223,156 @@ module Api
       end
 
       private
-        # Private helper methods for export
-        def export_csv
-          include_dollar = params[:include_dollar] != 'false'
 
-          headers['Content-Type'] = 'text/csv'
-          headers['Content-Disposition'] = "attachment; filename=\"mailing-data-#{Date.today}.csv\""
-          headers['Last-Modified'] = Time.now.ctime.to_s
-          headers['Cache-Control'] = 'no-cache'
-          headers.delete('Content-Length')
+      def export_csv
+        include_dollar = params[:include_dollar] != 'false'
 
-          self.response_body = Enumerator.new do |yielder|
-            yielder << CSV.generate_line(['full_name', 'first_name', 'last_name', 'property_address', 'property_city', 
-                                          'property_state', 'property_zip', 'mailing_address', 'mailing_city', 
-                                          'mailing_state', 'mailing_zip', 'checkval', 'mail_month', 'mail_year'])
+        headers['Content-Type'] = 'text/csv'
+        headers['Content-Disposition'] = "attachment; filename=\"mailing-data-#{Date.today}.csv\""
+        headers['Last-Modified'] = Time.now.ctime.to_s
+        headers['Cache-Control'] = 'no-cache'
+        headers.delete('Content-Length')
 
-            Mailed.find_each(batch_size: 1000) do |record|
-              yielder << CSV.generate_line([
-                record.full_name,
-                record.first_name, 
-                record.last_name,
-                record.property_address,
-                record.property_city,
-                record.property_state,
-                record.property_zip,
-                record.mailing_address,
-                record.mailing_city,
-                record.mailing_state,
-                record.mailing_zip,
-                record.formatted_checkval(include_dollar),
-                record.mail_month,
-                record.mail_year,
-                record.lists
-              ])
-            end
+        self.response_body = Enumerator.new do |yielder|
+          yielder << CSV.generate_line(['full_name', 'first_name', 'last_name', 'property_address', 'property_city', 
+                                        'property_state', 'property_zip', 'mailing_address', 'mailing_city', 
+                                        'mailing_state', 'mailing_zip', 'checkval', 'mail_month', 'mail_year', 'lists'])
+
+          Mailed.find_each(batch_size: 1000) do |record|
+            yielder << CSV.generate_line([
+              record.full_name,
+              record.first_name, 
+              record.last_name,
+              record.property_address,
+              record.property_city,
+              record.property_state,
+              record.property_zip,
+              record.mailing_address,
+              record.mailing_city,
+              record.mailing_state,
+              record.mailing_zip,
+              record.formatted_checkval(include_dollar),
+              record.mail_month,
+              record.mail_year,
+              record.lists
+            ])
           end
         end
+      end
 
-        def export_xlsx
-          # For Excel export, you'll need a gem like 'caxlsx'
-          require 'axlsx'
+      def export_xlsx
+        require 'axlsx'
+        
+        package = Axlsx::Package.new
+        workbook = package.workbook
+        
+        workbook.add_worksheet(name: "Mailing Data") do |sheet|
+          sheet.add_row ['full_name', 'first_name', 'last_name', 'property_address', 'property_city', 
+                        'property_state', 'property_zip', 'mailing_address', 'mailing_city', 
+                        'mailing_state', 'mailing_zip', 'checkval', 'mail_month', 'mail_year', 'lists']
           
-          package = Axlsx::Package.new
-          workbook = package.workbook
-          
-          # Add worksheet
-          workbook.add_worksheet(name: "Mailing Data") do |sheet|
-            # Add headers
-            sheet.add_row ['full_name', 'first_name', 'last_name', 'property_address', 'property_city', 
-                          'property_state', 'property_zip', 'mailing_address', 'mailing_city', 
-                          'mailing_state', 'mailing_zip', 'checkval', 'mail_month', 'mail_year','lists']
-            
-            # Add data rows
-            @records.each do |record|
-              sheet.add_row [
-                record.full_name,
-                record.first_name, 
-                record.last_name,
-                record.property_address,
-                record.property_city,
-                record.property_state,
-                record.property_zip,
-                record.mailing_address,
-                record.mailing_city,
-                record.mailing_state,
-                record.mailing_zip,
-                record.checkval,
-                record.mail_month,
-                record.mail_year,
-                record.lists
-              ]
-            end
-          end
-          
-          # Generate the file
-          file_contents = package.to_stream.read
-          
-          # Send the file
-          send_data file_contents, 
-                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
-                    disposition: 'attachment', 
-                    filename: "mailing-data-#{Date.today}.xlsx"
-        end
-
-        def export_json
-          render json: @records
-        end
-
-        # Check if the request is JSON
-        def json_request?
-          request.format.json?
-        end
-
-        # Helper method to parse mail_year from CSV, with fallback to current year
-        def parse_mail_year(year_value)
-          return Date.current.year if year_value.blank?
-          
-          year = year_value.to_i
-          # Basic validation - year should be reasonable
-          if year >= 2000 && year <= Date.current.year + 5
-            year
-          else
-            Date.current.year
+          @records.each do |record|
+            sheet.add_row [
+              record.full_name,
+              record.first_name, 
+              record.last_name,
+              record.property_address,
+              record.property_city,
+              record.property_state,
+              record.property_zip,
+              record.mailing_address,
+              record.mailing_city,
+              record.mailing_state,
+              record.mailing_zip,
+              record.checkval,
+              record.mail_month,
+              record.mail_year,
+              record.lists
+            ]
           end
         end
+        
+        file_contents = package.to_stream.read
+        
+        send_data file_contents, 
+                  type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
+                  disposition: 'attachment', 
+                  filename: "mailing-data-#{Date.today}.xlsx"
+      end
 
-        # Updated method to compare records by both month and year
-        def should_update_record?(existing_record, new_row)
-          new_year = parse_mail_year(new_row['mail_year'])
-          new_month = new_row['mail_month']
-          
-          return true if new_month.blank? # If no month specified, allow update
-          
-          # Get existing record's date value
-          existing_value = existing_record.mail_date_value
-          
-          # Calculate new record's date value
-          months = ["January", "February", "March", "April", "May", "June", 
-                    "July", "August", "September", "October", "November", "December"]
-          new_month_index = months.index(new_month) || 0
-          new_value = (new_year * 12) + new_month_index
-          
-          # Update if new record is newer or equal (you can change this logic)
-          new_value >= existing_value
-        end
-      
-        # Use callbacks to share common setup or constraints between actions
-        def set_mailed
-          @mailed = Mailed.find(params[:id])
-        end
+      def export_json
+        render json: @records
+      end
 
-        # Only allow a list of trusted parameters through
-        def mailed_params
-          params.require(:mailed).permit(
-            :full_name,
-            :first_name,
-            :last_name,
-            :mailing_address,
-            :mailing_city,
-            :mailing_state,
-            :mailing_zip,
-            :property_address,
-            :property_city,
-            :property_state,
-            :property_zip,
-            :checkval,
-            :mail_month,
-            :mail_year,
-            :lists
+      def json_request?
+        request.format.json?
+      end
+
+      def parse_mail_year(year_value)
+        return Date.current.year if year_value.blank?
+        
+        year = year_value.to_i
+        if year >= 2000 && year <= Date.current.year + 5
+          year
+        else
+          Date.current.year
+        end
+      end
+
+      def should_update_record?(existing_record, new_row)
+        new_year = parse_mail_year(new_row['mail_year'])
+        new_month = new_row['mail_month']
+        
+        return true if new_month.blank?
+        
+        existing_value = existing_record.mail_date_value
+        
+        months = Mailed::VALID_MONTHS
+        new_month_index = months.index(new_month) || 0
+        new_value = (new_year * 12) + new_month_index
+        
+        # Update if new record is newer
+        new_value >= existing_value
+      end
+
+      # Add campaign to history if it's not already there
+      def add_to_history_if_unique(existing_record, new_row)
+        new_year = parse_mail_year(new_row['mail_year'])
+        new_month = new_row['mail_month']
+        
+        # Check if this period already exists in history
+        history_exists = existing_record.mailing_histories.exists?(
+          mail_month: new_month,
+          mail_year: new_year
+        )
+        
+        # Check if it matches current record
+        is_current = (existing_record.mail_month == new_month && 
+                     existing_record.mail_year == new_year)
+        
+        # Add to history if unique
+        unless history_exists || is_current
+          existing_record.mailing_histories.create(
+            checkval: new_row['checkval'],
+            mail_month: new_month,
+            mail_year: new_year,
+            lists: new_row['lists']
           )
         end
+      end
+
+      def set_mailed
+        @mailed = Mailed.find(params[:id])
+      end
+
+      def mailed_params
+        params.require(:mailed).permit(
+          :full_name, :first_name, :last_name,
+          :mailing_address, :mailing_city, :mailing_state, :mailing_zip,
+          :property_address, :property_city, :property_state, :property_zip,
+          :checkval, :mail_month, :mail_year, :lists
+        )
+      end
     end
   end
 end
