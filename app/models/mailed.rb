@@ -93,10 +93,11 @@ class Mailed < ApplicationRecord
   end
 
   # Get complete history including current record
+  # FIXED: Always show actual month/year, never "Multiple Campaigns" in full_history
   def full_history
     history = campaign_history.map do |h|
       {
-        mail_period: h.mail_period,
+        mail_period: "#{h.mail_month} #{h.mail_year}",
         checkval: h.checkval,
         formatted_checkval: h.formatted_checkval,
         lists: h.lists_array,
@@ -106,11 +107,11 @@ class Mailed < ApplicationRecord
       }
     end
 
-    # Add current record as the latest
+    # Add current record as the latest - always show actual period
     current = {
-      mail_period: mail_period,
+      mail_period: "#{mail_month} #{mail_year}",
       checkval: checkval,
-      formatted_checkval: formatted_checkval,
+      formatted_checkval: checkval ? "$#{checkval}" : '',
       lists: lists_array,
       mail_month: mail_month,
       mail_year: mail_year,
