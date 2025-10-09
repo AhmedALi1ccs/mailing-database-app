@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-# Run database migrations
-echo "Running DB Migrations..."
+echo "Setting up database..."
+bundle exec rails db:migrate:status 2>/dev/null || bundle exec rails db:schema:load
 bundle exec rails db:migrate
 
-# Start the server
+echo "Starting Rails server..."
 exec "$@"
